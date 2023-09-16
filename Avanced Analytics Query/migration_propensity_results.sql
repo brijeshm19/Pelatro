@@ -1,0 +1,18 @@
+SELECT 
+IN_ACCOUNT_NUMBER,
+'migration_propensity_results' AS MODEL_NAME,
+date_cvm AS LAST_MODEL_REFRESH_DATE,
+propensity_to_buy AS AD_ATTRIBUTE_31
+FROM(
+SELECT 
+*,
+ROW_NUMBER() OVER (PARTITION BY IN_ACCOUNT_NUMBER) AS IN_RANK
+FROM(
+SELECT 
+*,
+RANK() OVER (ORDER BY date_cvm DESC) AS MIGRATION_LAST_DATE_FLAG
+FROM neocognix.migration_propensity_results
+WHERE date_cvm < date('"+context.vLoadDate+"')
+)MIGRATION_LAST_DATE
+WHERE MIGRATION_LAST_DATE_FLAG=1 
+)UNI_IN WHERE IN_RANK=1;

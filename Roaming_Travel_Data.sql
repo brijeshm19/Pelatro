@@ -1,0 +1,42 @@
+WITH Roaming_Travel_Data AS (
+SELECT 
+MSISDN,
+SUM(CASE WHEN  FLAG_RLH_1M=1 THEN 1 ELSE 0 END) AS RLH_1M,
+SUM(CASE WHEN  FLAG_RLH_3M=1 THEN 1 ELSE 0 END) AS RLH_3M,
+COUNT(Country) AS RLH_6M,
+COUNT(DISTINCT Country) AS RLH_UNIQUE_COUNTRY_6M
+FROM(
+SELECT  
+*,
+CASE WHEN CAST(DATETIME  AS DATE)>=ADD_MONTHS('"+context.vLoadDate+"'()-1 ,-1) THEN 1 ELSE 0 END AS FLAG_RLH_1M,
+CASE WHEN CAST(DATETIME  AS DATE)>=ADD_MONTHS('"+context.vLoadDate+"'()-1 ,-3) THEN 1 ELSE 0 END AS FLAG_RLH_3M
+FROM(
+SELECT *,
+CASE WHEN Prev_Country is null THEN 1 WHEN Country<>Prev_Country THEN 1 ELSE 0 END AS PARTITION_FLAG
+FROM(
+SELECT 
+*,
+LAG(Country) OVER (PARTITION BY MSISDN ORDER BY MSISDN,ID) AS Prev_Country
+FROM(
+SELECT a.*,
+CASE WHEN a.MCC=424 THEN 'Uae' WHEN country is null then 'Others' ELSE country END AS Country
+FROM uae_db_prod.ae_stg.roaming_ussd_received_data a
+LEFT JOIN ( SELECT MCC,MAX(country) as  country FROM uae_db_prod.ae_prod.dim_roam_country_operator GROUP BY 1) b on a.MCC=b.MCC
+WHERE CAST(DATETIME  AS DATE)>=ADD_MONTHS('"+context.vLoadDate+"' -1 ,-6) AND CAST(DATETIME  AS DATE) < '"+context.vLoadDate+"'  AND regexp_like(a.MCC,'[0-9]') AND a.MCC NOT IN ('000','901')
+ORDER BY MSISDN,ID
+)A 
+)B
+)C WHERE PARTITION_FLAG=1 AND Country<>'Uae'
+)FINAL GROUP BY 1
+)
+
+SELECT a.MSISDN,
+IN_ACCOUNT_NUMBER,
+'' AS ROAMING_BL,
+RLH_1M,
+RLH_3M,
+RLH_6M,
+RLH_UNIQUE_COUNTRY_6M
+FROM Roaming_Travel_Data a 
+LEFT JOIN (SELECT MSISDN,MAX(IN_ACCOUNT_NUMBER) AS IN_ACCOUNT_NUMBER FROM uae_db_prod.ae_prod.customer_master GROUP BY MSISDN) b on a.MSISDN=b.MSISDN
+;

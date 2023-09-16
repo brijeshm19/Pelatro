@@ -1,0 +1,191 @@
+select 
+IN_NUMBER as IN_ACCOUNT_NUMBER, 
+case
+	when (CRM_FLAG_DIPLOMATE=1 or CRM_NATIONALITY_NAME='United Arab Emirates' or CRM_ID_NEW_TYPE='Emirates ID') then 
+		COALESCE(CRM_EXTENDED_EXPIRY_DATE,CRM_EXPIRY_FINAL_DATE)
+	when CRM_ID_NEW_TYPE='GCC National ID' then
+		COALESCE(CRM_EXTENDED_EXPIRY_DATE,
+				case
+					when CRM_REPORTING_DATE>'2020-03-17' then 
+						case
+							when CRM_REPORTING_DATE+90 > CRM_EXPIRY_FINAL_DATE then CRM_EXPIRY_FINAL_DATE else CRM_REPORTING_DATE+90
+						end
+					ELSE 
+						CRM_EXPIRY_FINAL_DATE
+				end)
+	when CRM_ID_NEW_TYPE='Passport' then
+		COALESCE(CRM_EXTENDED_EXPIRY_DATE,
+				case 
+					when VISA_PASSPORT_FLAG=1 then case when CRM_REPORTING_DATE+90 > CRM_EXPIRY_FINAL_DATE then CRM_EXPIRY_FINAL_DATE else CRM_REPORTING_DATE+90 end
+				else
+					case when CRM_REPORTING_DATE+30 >CRM_EXPIRY_FINAL_DATE then CRM_EXPIRY_FINAL_DATE else CRM_REPORTING_DATE+30 end
+				end)
+end as REGISTRATION_VALIDITY_DATE
+from (
+select 
+IN_NUMBER,
+CUSTOMER_ID,
+CRM_FLAG_DIPLOMATE,
+CRM_EXTENDED_EXPIRY_DATE,
+CASE 
+	when CRM_FLAG_DIPLOMATE=1 then 
+	case 
+		when CRM_EXTENDED_EXPIRY_DATE is null then CRM_EXPIRY_DATE
+		else CRM_EXTENDED_EXPIRY_DATE
+	end
+	else CRM_EXPIRY_DATE
+END AS CRM_EXPIRY_FINAL_DATE,
+COALESCE (NATIONALITY_NAME,'Null') CRM_NATIONALITY_NAME,
+CRM_ID_NEW_TYPE,
+CRM_REPORTING_DATE,
+COALESCE (VISA_PASSPORT_FLAG,0)VISA_PASSPORT_FLAG
+from 
+(select 
+*,row_number() over (partition by IN_NUMBER order by CRM_REGISTRATION_TIMESTAMP desc) as rnk
+from 
+(select aaa.*,bbb.NATIONALITY_NAME from (select 
+*,
+case
+	when CRM_ID_NEW_TYPE='Diplomat ID' then CRM_EXTENDED_EXPIRY_DATE_ORIGINAL
+	else
+		case
+			when CRM_REPORTING_DATE>='2022-01-01' THEN 
+			case
+				when CRM_EXTENSION_REASON is null then null else CRM_EXTENDED_EXPIRY_DATE_ORIGINAL
+			end
+			else
+			CRM_EXTENDED_EXPIRY_DATE_ORIGINAL
+		end
+end as CRM_EXTENDED_EXPIRY_DATE
+from (
+select 
+CRM_ID,IN_ACCOUNT_NUMBER as IN_NUMBER,
+trim(CRM_CUSTOMER_ID) as CUSTOMER_ID ,
+CASE 
+	when CRM_IS_DIPLOMAT=1 AND CRM_DIPLOMAT_ID is not null then 1 else 0
+END AS CRM_FLAG_DIPLOMATE,
+CRM_IS_DIPLOMAT,
+CRM_NOBILL_CONTACTID,
+CASE 
+	when CRM_NATIONALITY is null then 'Null'
+	when CRM_NATIONALITY ='D' then 'Germany'
+	when CRM_NATIONALITY ='RKS' then 'Kosovo'
+	else CRM_NATIONALITY
+END as CRM_NATIONALITY_NAME,
+CRM_REGISTRATION_TIMESTAMP,
+CRM_ID_NUMBER,
+CASE 
+	when CRM_IS_DIPLOMAT=1 and CRM_DIPLOMAT_ID is not null then CRM_DIPLOMAT_ID else CRM_ID_NUMBER
+END as CRM_ID_NEW_NUMBER,
+CRM_ID_TYPE,
+CASE 
+	when CRM_IS_DIPLOMAT=1 and CRM_DIPLOMAT_ID is not null then 'Diplomat ID' else CRM_ID_TYPE
+END as CRM_ID_NEW_TYPE,
+CRM_ISSUE_DATE,
+CRM_EXPIRY_DATE,
+CRM_VERIFICATION_STATUS,
+CRM_VERIFICATION_CHANNEL,
+CRM_VERIFIED_BY,
+CRM_REJECTION_REASON,
+COALESCE(CRM_VERIFICATION_TIMESTAMP,CRM_CREATION_TIMESTAMP) AS CRM_REPORTING_TIMESTAMP,
+cast(COALESCE(CRM_VERIFICATION_TIMESTAMP,CRM_CREATION_TIMESTAMP) as date) AS CRM_REPORTING_DATE,
+COALESCE(CRM_VERIFICATION_TIMESTAMP,CRM_CREATION_TIMESTAMP) AS CRM_REPORTING_TIME,
+CRM_VERIFICATION_TIMESTAMP,
+CRM_CUST_STAUS,
+CRM_CREATION_TIMESTAMP,
+CRM_MODIFIED_TIMESTAMP,
+CRM_VERIFICATION_TIMESTAMP_02,
+CRM_EXTENDED_EXPIRY_DATE AS CRM_EXTENDED_EXPIRY_DATE_ORIGINAL,
+CRM_EXTENSION_REASON,
+CRM_DIPLOMAT_ID
+from (
+SELECT  Id AS CRM_ID,IN_ACCOUNT_NUMBER,
+    Contactid AS CRM_CUSTOMER_ID,
+    IsDiplomat AS CRM_IS_DIPLOMAT,
+    NobillContactId AS CRM_NOBILL_CONTACTID,
+    FirstName AS CRM_FIRST_NAME,
+    Email AS CRM_EMAIL,
+    Gender AS CRM_GENDER,
+    cast(BirthDate as date) as CRM_DOB,
+    RegistrationDate AS CRM_REGISTRATION_TIMESTAMP,
+    IdNumber AS CRM_ID_NUMBER,
+    case 
+    	when IdType='emiratesid' then 'Emirates ID'
+    	when IdType='passport' then 'Passport'
+    	when IdType='gccid' then 'GCC National ID'
+    	else 'Null'
+    end as CRM_ID_TYPE,
+    cast(IssueDate as date) as CRM_ISSUE_DATE,
+    cast(ExpiryDate as date) as CRM_EXPIRY_DATE,
+   	VerificationStatus AS CRM_VERIFICATION_STATUS,
+    VerificationChannel AS CRM_VERIFICATION_CHANNEL,
+    VerifiedBy AS CRM_VERIFIED_BY,
+    VerificationRejectionReason AS CRM_REJECTION_REASON,
+    VerificationDate AS CRM_VERIFICATION_TIMESTAMP,
+    Status AS CRM_CUST_STAUS,
+    CreatedOn  AS CRM_CREATION_TIMESTAMP,
+    ModifiedOn AS CRM_MODIFIED_TIMESTAMP,
+    VerificationDate2 AS CRM_VERIFICATION_TIMESTAMP_02,
+    CASE 
+    	when ExtensionReason='TDRABacklogClearance' then null else cast(ExtendedExpiryDate as date)
+    END as CRM_EXTENDED_EXPIRY_DATE,
+    CASE 
+    	when ExtensionReason='TDRABacklogClearance' then null else ExtensionReason
+    END as CRM_EXTENSION_REASON,
+    DiplomaticId AS CRM_DIPLOMAT_ID,
+    Nationality AS CRM_NATIONALITY
+    FROM (
+SELECT
+*,
+ROW_NUMBER() OVER (Partition by contactid ORDER BY id desc) AS CRM_RANK
+  FROM (select * from (select b.*,a.NobillAccountNo as IN_ACCOUNT_NUMBER,row_number() over (partition by a.NobillAccountNo order by a.ActivationDate desc) rnk from ae_prod.cas_tx_activations a join ae_stg.customerdb_customers b on(a.NobillCustomerID=b.NobillContactId))c where rnk=1)x
+  WHERE VerificationStatus IS NOT NULL
+)a  WHERE CRM_RANK=1) x)yy)aaa
+left join 
+(SELECT 
+ "alpha_3" CRM_NATIONALITY,
+ MAX(name) AS CRM_NATIONALITY_NAME  ,
+  MAX(name) AS NATIONALITY_NAME 
+FROM ae_prod."wsc_countries_lookup"
+GROUP BY 1)bbb on (aaa.CRM_NATIONALITY_NAME=bbb.CRM_NATIONALITY))x
+left join
+(select 
+IDVERIFICATION_NATIONALITYCODE,
+    IDVERIFICATION_ID as CRM_CUSTOMER_ID,
+    IDVERIFICATION_IDEXPIRYDATE,
+    IDVERIFICATION_ISSUEDDATE
+from (
+SELECT *
+FROM(
+SELECT 
+t1.ID AS IDVERIFICATION_ID ,
+t1.CreationDate AS IDVERIFICATION_DATE, 
+t1.CustomerID AS IDVERIFICATION_CUSTOMERID ,
+t1.IDExpiryDate AS IDVERIFICATION_IDEXPIRYDATE,
+t1.IDIssueDate AS IDVERIFICATION_ISSUEDDATE,
+t1.IDNumber AS IDVERIFICATION_IDNUMBER,
+t1.NationalityCode AS IDVERIFICATION_NATIONALITYCODE,
+t1.IDTypeId     AS IDVERIFICATION_IDTYPEID,
+CASE WHEN t1.IDTypeId=1 THEN 'Emirates ID'
+WHEN t1.IDTypeId=2 THEN 'Passport'  
+WHEN t1.IDTypeId=3 THEN 'GCC National ID' ELSE 'Null' END AS IDVERIFICATION_IDTYPE_NAME
+FROM (
+SELECT a.*,b.NAME AS ProcessNAME,c.Name as STATUSNAME
+FROM ae_stg.cas_id_verification_request  a
+LEFT JOIN ae_stg.cas_process  b on a.ProcessID=b.ID
+LEFT JOIN ae_stg.cas_id_verification_status  c on c.ID=a.VerificationStatusID
+WHERE ProcessID IN(1,2,4,5,21,22,40,41,48,51)
+)t1
+)t2)x)y
+on(x.CRM_ID=y.CRM_CUSTOMER_ID)
+left join 
+(SELECT 
+CustomerId as CRM_CUSTOMER_ID,
+ 1 AS VISA_PASSPORT_FLAG
+FROM (
+	SELECT  * , ROW_NUMBER() OVER (PARTITION BY CustomerId ORDER BY CustomerId,id desc) AS DOC_RANK
+	from 
+   ae_stg.customer_db_documents 
+   WHERE StatusCode = 1 AND  DocType = 'entrystamppageofthepassport' 
+   )A WHERE DOC_RANK=1)z
+on(x.CRM_ID=z.CRM_CUSTOMER_ID))ww where rnk=1)zzz
